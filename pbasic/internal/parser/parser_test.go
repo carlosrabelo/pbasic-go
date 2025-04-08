@@ -5,6 +5,7 @@ import (
 
 	"github.com/carlosrabelo/pbasic/pbasic/internal/ast"
 	"github.com/carlosrabelo/pbasic/pbasic/internal/lexer"
+	"github.com/carlosrabelo/pbasic/pbasic/internal/token"
 )
 
 func parse(t *testing.T, input string) ast.Statement {
@@ -56,6 +57,144 @@ func TestImplicitLet(t *testing.T) {
 	}
 	if letStmt.Name.Name != "A" {
 		t.Fatalf("expected A, got %s", letStmt.Name.Name)
+	}
+}
+
+func TestPrintStmt(t *testing.T) {
+	stmt := parse(t, `PRINT "HELLO", X;`)
+	printStmt, ok := stmt.(*ast.PrintStmt)
+	if !ok {
+		t.Fatalf("not a PrintStmt: %T", stmt)
+	}
+	if len(printStmt.Items) != 4 {
+		t.Fatalf("expected 4 items, got %d", len(printStmt.Items))
+	}
+	if printStmt.Items[0].Kind != ast.PrintStr || printStmt.Items[0].Str != "HELLO" {
+		t.Fatalf("first item wrong: %+v", printStmt.Items[0])
+	}
+	if printStmt.Items[1].Kind != ast.PrintTab {
+		t.Fatalf("second item expected tab, got %+v", printStmt.Items[1])
+	}
+	if printStmt.Items[2].Kind != ast.PrintExpr {
+		t.Fatalf("third item expected expr, got %+v", printStmt.Items[2])
+	}
+	if printStmt.Items[3].Kind != ast.PrintSemic {
+		t.Fatalf("fourth item expected semicolon, got %+v", printStmt.Items[3])
+	}
+}
+
+func TestGotoStmt(t *testing.T) {
+	stmt := parse(t, "GOTO 100")
+	gotoStmt, ok := stmt.(*ast.GotoStmt)
+	if !ok {
+		t.Fatalf("not a GotoStmt: %T", stmt)
+	}
+	numExpr, ok := gotoStmt.Target.(*ast.NumberExpr)
+	if !ok {
+		t.Fatalf("target not a NumberExpr: %T", gotoStmt.Target)
+	}
+	if numExpr.Value != 100 {
+		t.Fatalf("expected 100, got %f", numExpr.Value)
+	}
+}
+
+func TestGosubStmt(t *testing.T) {
+	stmt := parse(t, "GOSUB 200")
+	_, ok := stmt.(*ast.GosubStmt)
+	if !ok {
+		t.Fatalf("not a GosubStmt: %T", stmt)
+	}
+}
+
+func TestIfStmt(t *testing.T) {
+	stmt := parse(t, "IF A = 5 THEN GOTO 100")
+	ifStmt, ok := stmt.(*ast.IfStmt)
+	if !ok {
+		t.Fatalf("not an IfStmt: %T", stmt)
+	}
+	binExpr, ok := ifStmt.Cond.(*ast.BinaryExpr)
+	if !ok {
+		t.Fatalf("cond not a BinaryExpr: %T", ifStmt.Cond)
+	}
+	if binExpr.Op != token.ASSIGN {
+		t.Fatalf("expected = operator, got %s", binExpr.Op)
+	}
+	_, ok = ifStmt.ThenStmt.(*ast.GotoStmt)
+	if !ok {
+		t.Fatalf("then not a GotoStmt: %T", ifStmt.ThenStmt)
+	}
+}
+
+func TestIfStmtBlock(t *testing.T) {
+	stmt := parse(t, "IF A = 1 THEN PRINT A : GOTO 100")
+	ifStmt, ok := stmt.(*ast.IfStmt)
+	if !ok {
+		t.Fatalf("not an IfStmt: %T", stmt)
+	}
+	block, ok := ifStmt.ThenStmt.(*ast.BlockStmt)
+	if !ok {
+		t.Fatalf("then not a BlockStmt: %T", ifStmt.ThenStmt)
+	}
+	if len(block.Statements) != 2 {
+		t.Fatalf("expected 2 statements, got %d", len(block.Statements))
+	}
+}
+
+func TestInputStmt(t *testing.T) {
+	stmt := parse(t, `INPUT "NAME: "; N`)
+	inputStmt, ok := stmt.(*ast.InputStmt)
+	if !ok {
+		t.Fatalf("not an InputStmt: %T", stmt)
+	}
+	if inputStmt.Prompt != "NAME: " {
+		t.Fatalf("expected prompt 'NAME: ', got '%s'", inputStmt.Prompt)
+	}
+	if inputStmt.Var.Name != "N" {
+		t.Fatalf("expected var N, got %s", inputStmt.Var.Name)
+	}
+}
+
+func TestInputStmtNoPrompt(t *testing.T) {
+	stmt := parse(t, "INPUT X")
+	inputStmt, ok := stmt.(*ast.InputStmt)
+	if !ok {
+		t.Fatalf("not an InputStmt: %T", stmt)
+	}
+	if inputStmt.Prompt != "" {
+		t.Fatalf("expected no prompt, got '%s'", inputStmt.Prompt)
+	}
+	if inputStmt.Var.Name != "X" {
+		t.Fatalf("expected X, got %s", inputStmt.Var.Name)
+	}
+}
+
+func TestRemStmt(t *testing.T) {
+	stmt := parse(t, "REM HELLO WORLD")
+	remStmt, ok := stmt.(*ast.RemStmt)
+	if !ok {
+		t.Fatalf("not a RemStmt: %T", stmt)
+	}
+	if remStmt.Text == "" {
+		t.Fatalf("expected non-empty comment text")
+	}
+}
+
+func TestBlockStmt(t *testing.T) {
+	stmt := parse(t, "PRINT A : GOTO 100")
+	block, ok := stmt.(*ast.BlockStmt)
+	if !ok {
+		t.Fatalf("not a BlockStmt: %T", stmt)
+	}
+	if len(block.Statements) != 2 {
+		t.Fatalf("expected 2 statements, got %d", len(block.Statements))
+	}
+	_, ok = block.Statements[0].(*ast.PrintStmt)
+	if !ok {
+		t.Fatalf("first not PrintStmt: %T", block.Statements[0])
+	}
+	_, ok = block.Statements[1].(*ast.GotoStmt)
+	if !ok {
+		t.Fatalf("second not GotoStmt: %T", block.Statements[1])
 	}
 }
 

@@ -188,6 +188,30 @@ func (p *Parser) parseStatement() ast.Statement {
 	switch p.cur.Type {
 	case token.LET:
 		return p.parseLetStmt()
+	case token.PRINT:
+		return p.parsePrintStmt()
+	case token.IF:
+		return p.parseIfStmt()
+	case token.GOTO:
+		return p.parseGotoStmt()
+	case token.GOSUB:
+		return p.parseGosubStmt()
+	case token.RETURN:
+		return p.parseReturnStmt()
+	case token.INPUT:
+		return p.parseInputStmt()
+	case token.END:
+		return p.parseEndStmt()
+	case token.LIST:
+		return p.parseListStmt()
+	case token.RUN:
+		return p.parseRunStmt()
+	case token.NEW:
+		return p.parseNewStmt()
+	case token.EXIT:
+		return p.parseExitStmt()
+	case token.REM:
+		return p.parseRemStmt()
 	case token.IDENT:
 		return p.parseImplicitLet()
 	default:
@@ -230,6 +254,156 @@ func (p *Parser) parseLetAssignment(stmt *ast.LetStmt) *ast.LetStmt {
 	p.nextToken()
 
 	stmt.Value = p.parseExpression(LOWEST)
+	return stmt
+}
+
+// ---- GOTO / GOSUB ----
+
+func (p *Parser) parseGotoStmt() *ast.GotoStmt {
+	stmt := &ast.GotoStmt{Token: p.cur}
+	p.nextToken()
+	stmt.Target = p.parseExpression(LOWEST)
+	return stmt
+}
+
+func (p *Parser) parseGosubStmt() *ast.GosubStmt {
+	stmt := &ast.GosubStmt{Token: p.cur}
+	p.nextToken()
+	stmt.Target = p.parseExpression(LOWEST)
+	return stmt
+}
+
+// ---- RETURN / END / LIST / RUN / NEW / EXIT ----
+
+func (p *Parser) parseReturnStmt() *ast.ReturnStmt {
+	stmt := &ast.ReturnStmt{Token: p.cur}
+	p.nextToken()
+	return stmt
+}
+
+func (p *Parser) parseEndStmt() *ast.EndStmt {
+	stmt := &ast.EndStmt{Token: p.cur}
+	p.nextToken()
+	return stmt
+}
+
+func (p *Parser) parseListStmt() *ast.ListStmt {
+	stmt := &ast.ListStmt{Token: p.cur}
+	p.nextToken()
+	return stmt
+}
+
+func (p *Parser) parseRunStmt() *ast.RunStmt {
+	stmt := &ast.RunStmt{Token: p.cur}
+	p.nextToken()
+	return stmt
+}
+
+func (p *Parser) parseNewStmt() *ast.NewStmt {
+	stmt := &ast.NewStmt{Token: p.cur}
+	p.nextToken()
+	return stmt
+}
+
+func (p *Parser) parseExitStmt() *ast.ExitStmt {
+	stmt := &ast.ExitStmt{Token: p.cur}
+	p.nextToken()
+	return stmt
+}
+
+// ---- REM ----
+
+func (p *Parser) parseRemStmt() *ast.RemStmt {
+	stmt := &ast.RemStmt{Token: p.cur}
+	// Consume everything up to EOL/EOF as comment text
+	var text string
+	p.nextToken()
+	for !p.curIs(token.EOL) && !p.curIs(token.EOF) {
+		text += p.cur.Literal
+		p.nextToken()
+	}
+	stmt.Text = text
+	return stmt
+}
+
+// ---- PRINT ----
+
+func (p *Parser) parsePrintStmt() *ast.PrintStmt {
+	stmt := &ast.PrintStmt{Token: p.cur}
+	p.nextToken()
+
+	for !p.curIs(token.EOL) && !p.curIs(token.EOF) && !p.curIs(token.COLON) {
+		switch p.cur.Type {
+		case token.COMMA:
+			stmt.Items = append(stmt.Items, ast.PrintItem{Kind: ast.PrintTab})
+			p.nextToken()
+		case token.SEMICOLON:
+			stmt.Items = append(stmt.Items, ast.PrintItem{Kind: ast.PrintSemic})
+			p.nextToken()
+		case token.STRING:
+			stmt.Items = append(stmt.Items, ast.PrintItem{
+				Kind: ast.PrintStr,
+				Str:  p.cur.Literal,
+			})
+			p.nextToken()
+		default:
+			expr := p.parseExpression(LOWEST)
+			stmt.Items = append(stmt.Items, ast.PrintItem{
+				Kind: ast.PrintExpr,
+				Expr: expr,
+			})
+		}
+	}
+
+	return stmt
+}
+
+// ---- IF ----
+
+func (p *Parser) parseIfStmt() *ast.IfStmt {
+	stmt := &ast.IfStmt{Token: p.cur}
+	p.nextToken()
+
+	stmt.Cond = p.parseExpression(LOWEST)
+
+	if !p.curIs(token.THEN) {
+		p.errors = append(p.errors,
+			fmt.Sprintf("expected THEN at %s", p.cur.Pos))
+		return stmt
+	}
+	p.nextToken()
+
+	// After THEN, parse all statements until end of line or EOF
+	stmts := p.parseStatementList(token.EOL, token.EOF)
+	if len(stmts) == 1 {
+		stmt.ThenStmt = stmts[0]
+	} else if len(stmts) > 1 {
+		stmt.ThenStmt = &ast.BlockStmt{Statements: stmts}
+	}
+	return stmt
+}
+
+// ---- INPUT ----
+
+func (p *Parser) parseInputStmt() *ast.InputStmt {
+	stmt := &ast.InputStmt{Token: p.cur}
+	p.nextToken()
+
+	if p.curIs(token.STRING) {
+		stmt.Prompt = p.cur.Literal
+		p.nextToken()
+		if p.curIs(token.SEMICOLON) || p.curIs(token.COMMA) {
+			p.nextToken()
+		}
+	}
+
+	if !p.curIs(token.IDENT) {
+		p.errors = append(p.errors,
+			fmt.Sprintf("expected variable at %s", p.cur.Pos))
+		return stmt
+	}
+	stmt.Var = &ast.IdentExpr{Token: p.cur, Name: p.cur.Literal}
+	p.nextToken()
 	return stmt
 }
 
