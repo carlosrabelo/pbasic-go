@@ -57,6 +57,7 @@ func newTestCtx(prog *testProgramStore, input string) *EvalContext {
 		Wr:    &buf,
 		Rd:    &testReader{data: input},
 	}
+
 }
 
 func parse(t *testing.T, input string) ast.Statement {
@@ -219,6 +220,141 @@ func TestEvalFree(t *testing.T) {
 	}
 }
 
+func TestEvalIfStmtTrue(t *testing.T) {
+	stmt := parse(t, "IF 1 = 1 THEN LET A = 42")
+	prog := &testProgramStore{}
+	ctx := newTestCtx(prog, "")
+	Eval(stmt, ctx)
+	obj, ok := ctx.Env.Get("A")
+	if !ok {
+		t.Fatal("A not set")
+	}
+	num := obj.(*object.Number)
+	if num.Value != 42 {
+		t.Fatalf("expected 42, got %f", num.Value)
+	}
+}
+
+func TestEvalIfStmtFalse(t *testing.T) {
+	stmt := parse(t, "IF 0 = 1 THEN LET A = 42")
+	ctx := newTestCtx(&testProgramStore{}, "")
+	Eval(stmt, ctx)
+	_, ok := ctx.Env.Get("A")
+	if ok {
+		t.Fatal("A should not be set")
+	}
+}
+
+func TestEvalIfStmtBlock(t *testing.T) {
+	input := "IF 1 = 1 THEN LET A = 1 : LET B = 2"
+	prog := &testProgramStore{}
+	ctx := newTestCtx(prog, "")
+	stmt := parse(t, input)
+	Eval(stmt, ctx)
+	a, _ := ctx.Env.Get("A")
+	b, _ := ctx.Env.Get("B")
+	if a.(*object.Number).Value != 1 {
+		t.Fatalf("expected A=1, got %f", a.(*object.Number).Value)
+	}
+	if b.(*object.Number).Value != 2 {
+		t.Fatalf("expected B=2, got %f", b.(*object.Number).Value)
+	}
+}
+
+func TestEvalGoto(t *testing.T) {
+	prog := &testProgramStore{}
+	prog.lines = []ast.LineNode{
+		{Number: 10, Statement: parse(t, "LET A = 1")},
+		{Number: 20, Statement: parse(t, "LET A = 2")},
+	}
+	ctx := newTestCtx(prog, "")
+	ctx.PC = 10
+	ctx.Running = true
+
+	stmt := parse(t, "GOTO 20")
+	Eval(stmt, ctx)
+
+	if ctx.PC != 20 {
+		t.Fatalf("expected PC=20, got %d", ctx.PC)
+	}
+	if !ctx.Running {
+		t.Fatal("expected running=true")
+	}
+}
+
+func TestEvalGosubReturn(t *testing.T) {
+	prog := &testProgramStore{}
+	prog.lines = []ast.LineNode{
+		{Number: 100, Statement: parse(t, "LET A = 1")},
+		{Number: 200, Statement: parse(t, "RETURN")},
+	}
+	ctx := newTestCtx(prog, "")
+	ctx.PC = 100
+	ctx.Running = true
+
+	stmt := parse(t, "GOSUB 200")
+	Eval(stmt, ctx)
+
+	if ctx.PC != 200 {
+		t.Fatalf("expected PC=200, got %d", ctx.PC)
+	}
+	if len(ctx.GosubStk) != 1 {
+		t.Fatalf("expected stack depth 1, got %d", len(ctx.GosubStk))
+	}
+
+	returnStmt := parse(t, "RETURN")
+	Eval(returnStmt, ctx)
+
+	if ctx.PC != 100 {
+		t.Fatalf("expected PC=100 after return, got %d", ctx.PC)
+	}
+}
+
+func TestEvalInput(t *testing.T) {
+	prog := &testProgramStore{}
+	ctx := newTestCtx(prog, "42\n")
+	stmt := parse(t, `INPUT X`)
+	Eval(stmt, ctx)
+	obj, ok := ctx.Env.Get("X")
+	if !ok {
+		t.Fatal("X not set")
+	}
+	num := obj.(*object.Number)
+	if num.Value != 42 {
+		t.Fatalf("expected 42, got %f", num.Value)
+	}
+}
+
+func TestEvalEnd(t *testing.T) {
+	ctx := newTestCtx(&testProgramStore{}, "")
+	ctx.Running = true
+	stmt := parse(t, "END")
+	Eval(stmt, ctx)
+	if ctx.Running {
+		t.Fatal("expected running=false after END")
+	}
+}
+
+func TestEvalExit(t *testing.T) {
+	ctx := newTestCtx(&testProgramStore{}, "")
+	stmt := parse(t, "EXIT")
+	Eval(stmt, ctx)
+	if !ctx.ShouldExit {
+		t.Fatal("expected ShouldExit=true after EXIT")
+	}
+}
+
+func TestEvalNew(t *testing.T) {
+	prog := &testProgramStore{}
+	prog.lines = []ast.LineNode{{Number: 10, Statement: parse(t, "PRINT 1")}}
+	ctx := newTestCtx(prog, "")
+	stmt := parse(t, "NEW")
+	Eval(stmt, ctx)
+	if prog.Len() != 0 {
+		t.Fatal("expected empty program after NEW")
+	}
+}
+
 func TestEvalBlockStmt(t *testing.T) {
 	prog := &testProgramStore{}
 	ctx := newTestCtx(prog, "")
@@ -234,10 +370,35 @@ func TestEvalBlockStmt(t *testing.T) {
 	}
 }
 
+func TestEvalPrint(t *testing.T) {
+	var buf strings.Builder
+	prog := &testProgramStore{}
+	ctx := &EvalContext{
+		Env:  object.NewEnvironment(),
+		Prog: prog,
+		Wr:   &buf,
+	}
+	stmt := parse(t, `PRINT "HELLO"`)
+	Eval(stmt, ctx)
+	if buf.String() != "HELLO\n" {
+		t.Fatalf("expected 'HELLO\\n', got %q", buf.String())
+	}
+}
+
 func TestEvalVarUndefined(t *testing.T) {
 	_, result := testEval(t, "LET A = B")
 	if !isError(result) {
 		t.Fatal("expected error for undefined variable")
+	}
+}
+
+func TestEvalRunNoProgram(t *testing.T) {
+	prog := &testProgramStore{}
+	ctx := newTestCtx(prog, "")
+	stmt := parse(t, "RUN")
+	result := Eval(stmt, ctx)
+	if !isError(result) {
+		t.Fatal("expected error RUN with no program")
 	}
 }
 
