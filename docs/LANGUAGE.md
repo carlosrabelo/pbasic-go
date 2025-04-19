@@ -1,5 +1,16 @@
 # PicoBasic Language Reference
 
+## Invoking a program file
+
+This is a CLI feature, not a language command. There is no `LOAD` statement.
+
+```
+pbasic                  # interactive REPL
+pbasic program.bas      # load numbered lines, RUN, then exit
+```
+
+Unnumbered lines in a file (for example a trailing `RUN`) are ignored. `INPUT` still reads from standard input.
+
 ## Syntax Overview
 
 Lines in PicoBasic follow this structure:

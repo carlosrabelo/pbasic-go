@@ -13,6 +13,7 @@ Interpretador BASIC minimalista escrito em Go, portado da versão original em as
 - Funções embutidas: FREE (memória disponível), RND (aleatório), ABS (valor absoluto)
 - Armazenamento de linhas tokenizadas com suporte a LIST para revisão do programa
 - REPL interativo com prompt `>` e execução direta de comandos
+- Executa um arquivo `.bas` pela linha de comando (`pbasic programa.bas`)
 - Roda em qualquer terminal — sem necessidade de simulador ou emulador
 
 ## Pré-requisitos
@@ -50,6 +51,12 @@ Ou diretamente:
 
 ```bash
 ./bin/pbasic
+```
+
+Execute um arquivo de programa (carrega as linhas numeradas, executa e sai):
+
+```bash
+./bin/pbasic demos/01_hello.bas
 ```
 
 ### Exemplo de sessão

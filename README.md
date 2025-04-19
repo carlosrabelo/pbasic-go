@@ -13,6 +13,7 @@ Minimal BASIC interpreter written in Go, ported from the original MIPS assembly 
 - Built-in functions: FREE (available memory), RND (random), ABS (absolute value)
 - Tokenized line storage with LIST support for program review
 - Interactive REPL with `>` prompt and direct command execution
+- Run a `.bas` file from the command line (`pbasic program.bas`)
 - Runs in any terminal — no simulator or emulator required
 
 ## Prerequisites
@@ -50,6 +51,12 @@ Or directly:
 
 ```bash
 ./bin/pbasic
+```
+
+Run a program file (loads numbered lines, runs, then exits):
+
+```bash
+./bin/pbasic demos/01_hello.bas
 ```
 
 ### Example session

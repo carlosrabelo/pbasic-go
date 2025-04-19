@@ -146,9 +146,61 @@ func (r *REPL) Run() {
 		}
 
 		if r.ctx.Running {
-			r.execLoop()
+			if err := r.execLoop(); err != nil {
+				fmt.Fprintln(r.ctx.Wr, err)
+			}
 		}
 	}
+}
+
+// LoadFile stores numbered lines from path. Blank and unnumbered lines are ignored.
+func (r *REPL) LoadFile(path string) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return r.load(f)
+}
+
+func (r *REPL) load(rd io.Reader) error {
+	sc := bufio.NewScanner(rd)
+	for sc.Scan() {
+		line := strings.TrimRight(sc.Text(), "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		line = strings.ToUpper(line)
+		num, body, ok := parseNumberedLine(line)
+		if !ok {
+			continue
+		}
+		if err := r.handleNumberedLine(num, body); err != nil {
+			return err
+		}
+	}
+	return sc.Err()
+}
+
+// RunProgram starts execution at the lowest line number, same as the RUN command.
+func (r *REPL) RunProgram() error {
+	if r.prog.Len() == 0 {
+		return fmt.Errorf("NO PROGRAM")
+	}
+	result := evaluator.Eval(&ast.RunStmt{}, r.ctx)
+	if result != nil && result.Type() == object.ErrorType {
+		return fmt.Errorf("%s", result.Inspect())
+	}
+	return r.execLoop()
+}
+
+// RunFile loads a BASIC source file, runs it, and does not enter the REPL.
+func (r *REPL) RunFile(path string) error {
+	defer signal.Stop(r.sigCh)
+	if err := r.LoadFile(path); err != nil {
+		return err
+	}
+	return r.RunProgram()
 }
 
 func (r *REPL) interrupted() bool {
@@ -162,7 +214,9 @@ func (r *REPL) interrupted() bool {
 
 func (r *REPL) processLine(line string) {
 	if num, body, ok := parseNumberedLine(line); ok {
-		r.handleNumberedLine(num, body)
+		if err := r.handleNumberedLine(num, body); err != nil {
+			fmt.Fprintln(r.ctx.Wr, err)
+		}
 		return
 	}
 
@@ -180,31 +234,29 @@ func (r *REPL) processLine(line string) {
 	}
 }
 
-func (r *REPL) execLoop() {
+func (r *REPL) execLoop() error {
 	for r.ctx.Running {
 		if r.interrupted() {
 			fmt.Fprintln(r.ctx.Wr)
 			r.ctx.Running = false
-			return
+			return nil
 		}
 
 		prevPC := r.ctx.PC
 		line, found := r.prog.Find(prevPC)
 		if !found {
-			fmt.Fprintf(r.ctx.Wr, "?LINE %d NOT FOUND\n", prevPC)
 			r.ctx.Running = false
-			return
+			return fmt.Errorf("?LINE %d NOT FOUND", prevPC)
 		}
 
 		result := evaluator.Eval(line.Statement, r.ctx)
 		if result != nil && result.Type() == object.ErrorType {
-			fmt.Fprintf(r.ctx.Wr, "%s\n", result.Inspect())
 			r.ctx.Running = false
-			return
+			return fmt.Errorf("%s", result.Inspect())
 		}
 
 		if !r.ctx.Running || r.ctx.ShouldExit {
-			return
+			return nil
 		}
 
 		if r.ctx.PC == prevPC {
@@ -220,6 +272,7 @@ func (r *REPL) execLoop() {
 			}
 		}
 	}
+	return nil
 }
 
 func (r *REPL) parseStmt(input string) ast.Statement {
@@ -235,23 +288,28 @@ func (r *REPL) parseStmt(input string) ast.Statement {
 	return stmt
 }
 
-func (r *REPL) handleNumberedLine(num int, body string) {
+func (r *REPL) handleNumberedLine(num int, body string) error {
 	if body == "" {
 		r.prog.Add(num, nil)
-		return
+		return nil
 	}
 	l := lexer.New(body)
 	p := parser.New(l)
 	stmt := p.ParseLine()
 	if len(p.Errors()) > 0 {
-		for _, err := range p.Errors() {
-			fmt.Fprintf(r.ctx.Wr, "?SYNTAX ERROR: %s\n", err)
+		var b strings.Builder
+		for i, err := range p.Errors() {
+			if i > 0 {
+				b.WriteByte('\n')
+			}
+			fmt.Fprintf(&b, "?SYNTAX ERROR: %s", err)
 		}
-		return
+		return fmt.Errorf("%s", b.String())
 	}
 	if stmt != nil {
 		r.prog.Add(num, stmt)
 	}
+	return nil
 }
 
 func parseNumberedLine(line string) (num int, body string, ok bool) {

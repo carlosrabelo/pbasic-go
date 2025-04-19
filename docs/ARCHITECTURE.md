@@ -182,16 +182,19 @@ Orchestrates the read-eval-print loop:
 
 `ProgramStore` is an in-memory map of `map[int]ast.Stmt` managed by `REPL`.
 
+File mode (`LoadFile` + `RunProgram` / `RunFile`): numbered lines are stored, blank and unnumbered lines are ignored, then the program auto-RUNs. No banner or prompt. Errors return to `main` for a non-zero exit.
+
 #### execLoop()
 
 1. Evaluates each program line sequentially via `Eval()`
 2. Checks returned object for `GotoValue` / `ReturnValue` / `Error`
 3. Checks `sigCh` non-blockingly — if signal received, sets `Running = false` and breaks
 4. After loop, resets `Running` to `false`
+5. Returns an error on runtime failure so file mode can exit with status 1
 
 ### Entry Point (`pbasic/cmd/pbasic/main.go`)
 
-Minimal: calls `repl.Start()` with `os.Stdin`/`os.Stdout`/`os.Stderr`.
+Minimal: no args → `repl.Run()` (interactive). One arg → `repl.RunFile(path)` (load, run, exit). Otherwise prints usage and exits 1.
 
 ## Design Decisions
 

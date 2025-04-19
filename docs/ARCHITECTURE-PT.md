@@ -182,16 +182,19 @@ Orquestra o loop read-eval-print:
 
 `ProgramStore` é um slice ordenado de `LineNode` gerenciado pelo `REPL`.
 
+Modo arquivo (`LoadFile` + `RunProgram` / `RunFile`): linhas numeradas são armazenadas, linhas vazias e sem número são ignoradas, e o programa executa automaticamente. Sem banner nem prompt. Erros retornam ao `main` para exit code diferente de zero.
+
 #### execLoop()
 
 1. Avalia cada linha do programa sequencialmente via `Eval()`
 2. Verifica o objeto retornado para `GotoValue` / `ReturnValue` / `Error`
 3. Verifica `sigCh` de forma não-bloqueante — se sinal recebido, define `Running = false` e interrompe
 4. Após o loop, redefine `Running` para `false`
+5. Devolve erro em falha de runtime para o modo arquivo sair com status 1
 
 ### Ponto de Entrada (`pbasic/cmd/pbasic/main.go`)
 
-Mínimo: chama `repl.Start()` com `os.Stdin`/`os.Stdout`/`os.Stderr`.
+Mínimo: sem args → `repl.Run()` (interativo). Um arg → `repl.RunFile(path)` (carrega, executa, sai). Caso contrário imprime o usage e sai com 1.
 
 ## Decisões de Design
 

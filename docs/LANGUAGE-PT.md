@@ -1,5 +1,16 @@
 # Referência da Linguagem PicoBasic
 
+## Invocar um arquivo de programa
+
+Isto é um recurso da CLI, não um comando da linguagem. Não existe o comando `LOAD`.
+
+```
+pbasic                  # REPL interativo
+pbasic programa.bas     # carrega linhas numeradas, executa RUN e sai
+```
+
+Linhas sem número no arquivo (por exemplo um `RUN` no final) são ignoradas. `INPUT` continua lendo da entrada padrão.
+
 ## Visão Geral da Sintaxe
 
 Linhas no PicoBasic seguem esta estrutura:
