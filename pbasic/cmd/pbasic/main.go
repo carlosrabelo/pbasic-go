@@ -1,7 +1,14 @@
 package main
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+
+	"github.com/carlosrabelo/pbasic/pbasic/internal/repl"
+)
 
 func main() {
-	fmt.Println("PicoBasic")
+	r := repl.New(os.Stdin, os.Stdout)
+	r.Run()
+	fmt.Println()
 }
